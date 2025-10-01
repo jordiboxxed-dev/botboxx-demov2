@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const FRONTEND_URL = "https://botboxx-demov2.vercel.app";
+const FRONTEND_URL = "https://botboxxapp.boxxed.agency";
 
 serve(async (req) => {
   console.log("--- Function create-mercadopago-preference invoked (v3) ---");

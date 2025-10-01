@@ -143,7 +143,7 @@ const Login = () => {
               }}
               providers={[]}
               theme="dark"
-              redirectTo="https://botboxx-demov2.vercel.app/auth/callback"
+              redirectTo="https://botboxxapp.boxxed.agency/auth/callback"
             />
             <ResendConfirmation />
           </>

@@ -23,7 +23,7 @@ export const ResendConfirmation = () => {
         type: 'signup',
         email: email,
         options: {
-          emailRedirectTo: 'https://botboxx-demov2.vercel.app/auth/callback'
+          emailRedirectTo: 'https://botboxxapp.boxxed.agency/auth/callback'
         }
       });
 

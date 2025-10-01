@@ -26,7 +26,7 @@ export const RegisterForm = ({ onSwitchToLogin }: RegisterFormProps) => {
         email,
         password,
         options: {
-          emailRedirectTo: 'https://botboxx-demov2.vercel.app/auth/callback',
+          emailRedirectTo: 'https://botboxxapp.boxxed.agency/auth/callback',
           data: {
             first_name: firstName,
             last_name: lastName,
