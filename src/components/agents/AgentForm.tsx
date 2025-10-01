@@ -26,7 +26,7 @@ interface AgentFormProps {
   submitButtonText?: string;
 }
 
-const DEFAULT_WEBHOOK_URL = "https://n8n.srv945931.hstgr.cloud/webhook/agente-ventas";
+const DEFAULT_WEBHOOK_URL = "https://n8n.boxxed.agency/webhook/agente-ventas";
 
 export const AgentForm = ({ onSubmit, isLoading, initialData, submitButtonText = "Crear Agente" }: AgentFormProps) => {
   const navigate = useNavigate();

@@ -80,7 +80,7 @@ const Templates = () => {
           description: creatingFromTemplate.description,
           system_prompt: creatingFromTemplate.systemPrompt,
           status: 'active',
-          webhook_url: "https://n8n.srv945931.hstgr.cloud/webhook/agente-ventas",
+          webhook_url: "https://n8n.boxxed.agency/webhook/agente-ventas",
         })
         .select()
         .single();
