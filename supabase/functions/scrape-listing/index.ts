@@ -9,17 +9,39 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// --- Selectores CSS para un portal inmobiliario tipo (ej. Mercado Libre Inmuebles) ---
-// Estos selectores son un punto de partida y pueden necesitar ajustes para otros sitios.
-const SELECTORS = {
-  propertyCard: ".ui-search-result__wrapper",
-  title: ".ui-search-item__title",
-  price: ".andes-money-amount__fraction",
-  currency: ".andes-money-amount__currency-symbol",
-  address: ".ui-search-item__location-location",
-  attributes: ".ui-search-card-attributes",
-  link: ".ui-search-link"
-};
+// --- Múltiples juegos de selectores para aumentar la compatibilidad ---
+const SELECTOR_SETS = [
+  { // Set 1: Mercado Libre Inmuebles
+    name: "Mercado Libre",
+    propertyCard: ".ui-search-result__wrapper",
+    title: ".ui-search-item__title",
+    price: ".andes-money-amount__fraction",
+    currency: ".andes-money-amount__currency-symbol",
+    address: ".ui-search-item__location-location",
+    attributes: ".ui-search-card-attributes",
+    link: ".ui-search-link"
+  },
+  { // Set 2: Zonaprop / Argenprop (usan atributos data-qa)
+    name: "Zonaprop/Argenprop",
+    propertyCard: "div[data-qa='posting-card']",
+    title: "h2",
+    price: "div[data-qa='POSTING_CARD_PRICE']",
+    currency: "", // A menudo incluido en el precio
+    address: "div[data-qa='POSTING_CARD_LOCATION']",
+    attributes: "div[data-qa='POSTING_CARD_FEATURES']",
+    link: "a[data-qa='posting-card-link']"
+  },
+  { // Set 3: Un fallback más genérico
+    name: "Genérico",
+    propertyCard: "article.listing, div.property-card, div.listing-item",
+    title: "h2, h3, .property-title",
+    price: "[class*='price'], .price",
+    currency: "[class*='currency']",
+    address: "[class*='address'], .location",
+    attributes: "[class*='features'], [class*='attributes']",
+    link: "a"
+  }
+];
 
 async function scrapeListingPage(url) {
   const properties = [];
@@ -34,21 +56,43 @@ async function scrapeListingPage(url) {
 
     const html = await response.text();
     const doc = new DOMParser().parseFromString(html, "text/html");
-    if (!doc) {
-      throw new Error("No se pudo analizar el HTML de la página.");
+    if (!doc) throw new Error("No se pudo analizar el HTML de la página.");
+
+    let activeSelectors = null;
+    let propertyCards = null;
+
+    // Probar cada juego de selectores hasta encontrar uno que funcione
+    for (const selectorSet of SELECTOR_SETS) {
+      const cards = doc.querySelectorAll(selectorSet.propertyCard);
+      if (cards && cards.length > 0) {
+        activeSelectors = selectorSet;
+        propertyCards = cards;
+        console.log(`Estructura compatible encontrada: ${activeSelectors.name}`);
+        break;
+      }
     }
 
-    const propertyCards = doc.querySelectorAll(SELECTORS.propertyCard);
+    if (!activeSelectors || !propertyCards) {
+      throw new Error("No se pudieron identificar las propiedades en la página. La estructura del sitio puede no ser compatible.");
+    }
     
     for (const card of propertyCards) {
-      const title = card.querySelector(SELECTORS.title)?.textContent?.trim() || "Título no encontrado";
-      const price = card.querySelector(SELECTORS.price)?.textContent?.trim() || "Precio no especificado";
-      const currency = card.querySelector(SELECTORS.currency)?.textContent?.trim() || "";
-      const address = card.querySelector(SELECTORS.address)?.textContent?.trim() || "Ubicación no especificada";
-      const attributes = card.querySelector(SELECTORS.attributes)?.textContent?.trim().replace(/\s+/g, ' ') || "Sin características adicionales";
-      const propertyUrl = card.querySelector(SELECTORS.link)?.getAttribute('href') || "";
+      const title = card.querySelector(activeSelectors.title)?.textContent?.trim() || "Título no encontrado";
+      
+      let price = card.querySelector(activeSelectors.price)?.textContent?.trim() || "Precio no especificado";
+      // Limpiar el precio de puntos y comas para consistencia
+      price = price.replace(/[.,]/g, '');
 
-      // Ensamblar el texto estructurado para esta propiedad
+      const currency = activeSelectors.currency ? card.querySelector(activeSelectors.currency)?.textContent?.trim() : "";
+      const address = card.querySelector(activeSelectors.address)?.textContent?.trim() || "Ubicación no especificada";
+      const attributes = card.querySelector(activeSelectors.attributes)?.textContent?.trim().replace(/\s+/g, ' ') || "Sin características adicionales";
+      
+      let propertyUrl = card.querySelector(activeSelectors.link)?.getAttribute('href') || "";
+      // Asegurarse de que la URL sea absoluta
+      if (propertyUrl && !propertyUrl.startsWith('http')) {
+        propertyUrl = new URL(propertyUrl, url).href;
+      }
+
       const propertyText = `
 Propiedad: ${title}
 Ubicación: ${address}
@@ -63,7 +107,7 @@ Enlace: ${propertyUrl}
     return properties;
   } catch (error) {
     console.error(`Error durante el scraping de ${url}:`, error.message);
-    throw error; // Re-lanzar para que sea capturado por el manejador principal
+    throw error;
   }
 }
 
@@ -96,13 +140,11 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ''
     );
 
-    // Iniciar el scraping
     const properties = await scrapeListingPage(url);
     if (properties.length === 0) {
       throw new Error("No se encontraron propiedades en la URL proporcionada con los selectores actuales.");
     }
 
-    // Crear una única fuente de conocimiento para este lote
     const sourceName = `Listado de ${new URL(url).hostname}`;
     const { data: sourceData, error: sourceError } = await supabaseAdmin.from("knowledge_sources").insert({
         user_id: user.id,
@@ -113,30 +155,25 @@ serve(async (req) => {
 
     if (sourceError) throw sourceError;
 
-    // Responder inmediatamente al cliente para no causar timeout
     const responsePromise = new Response(JSON.stringify({ 
       message: `Procesamiento iniciado para ${properties.length} propiedades.`,
       propertiesFound: properties.length
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 202, // Accepted
+      status: 202,
     });
 
-    // Procesar cada propiedad en segundo plano
     setTimeout(async () => {
       try {
         console.log(`Iniciando la indexación de ${properties.length} propiedades para la fuente ${sourceData.id}`);
         
-        // Crear un array de promesas para invocar la función de embedding para cada propiedad
         const embedPromises = properties.map(propertyText => 
           supabaseAdmin.functions.invoke("embed-and-store", {
             body: { sourceId: sourceData.id, textContent: propertyText },
           })
         );
 
-        // Esperar a que todas las promesas se resuelvan
         const results = await Promise.allSettled(embedPromises);
-
         const successfulEmbeds = results.filter(r => r.status === 'fulfilled').length;
         console.log(`Se procesaron exitosamente ${successfulEmbeds} de ${properties.length} propiedades.`);
 
