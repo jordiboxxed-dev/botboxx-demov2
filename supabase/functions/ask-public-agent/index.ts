@@ -321,14 +321,7 @@ serve(async (req) => {
       });
     }
 
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(responseText));
-        controller.close();
-      },
-    });
-
-    return new Response(stream, { headers: { ...corsHeaders, "Content-Type": "text/plain" } });
+    return new Response(responseText, { headers: { ...corsHeaders, "Content-Type": "text/plain" } });
   } catch (error) {
     console.error("Error in ask-public-agent function:", error);
     return new Response(JSON.stringify({ error: error.message }), {
