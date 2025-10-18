@@ -272,19 +272,34 @@ serve(async (req) => {
     const webhookResponse = await fetch(agentData.webhook_url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(webhookPayload)
+      body: JSON.stringify(webhookPayload),
+      signal: AbortSignal.timeout(30000) // 30 second timeout
     });
 
     if (!webhookResponse.ok) {
       const errorText = await webhookResponse.text();
-      throw new Error(`El webhook devolvió un error (${webhookResponse.status}): ${errorText}`);
+      console.error('Webhook error body:', errorText);
+      throw new Error(`El webhook devolvió un error (${webhookResponse.status}): ${errorText || 'Sin detalles'}`);
     }
 
-    const responseData = await webhookResponse.json();
-    let responseText = responseData.output;
+    const responseBodyText = await webhookResponse.text();
 
-    if (typeof responseText !== 'string') {
-      throw new Error("La respuesta del webhook no tiene el formato esperado { \"output\": \"...\" }");
+    if (!responseBodyText || responseBodyText.trim() === '') {
+        throw new Error('El webhook devolvió una respuesta vacía.');
+    }
+
+    let responseText = '';
+    try {
+        const responseData = JSON.parse(responseBodyText);
+        if (responseData.output && typeof responseData.output === 'string') {
+            responseText = responseData.output;
+        } else {
+            console.warn("La respuesta del webhook es JSON pero no tiene el formato { output: '...' }. Se devolverá el JSON completo.");
+            responseText = JSON.stringify(responseData, null, 2);
+        }
+    } catch (e) {
+        console.log("La respuesta del webhook no es JSON. Se tratará como texto plano.");
+        responseText = responseBodyText;
     }
 
     try {
@@ -306,6 +321,12 @@ serve(async (req) => {
     return new Response(responseText, { headers: { ...corsHeaders, "Content-Type": "text/plain" } });
   } catch (error) {
     console.error("Error in ask-agent function:", error);
+    if (error.name === 'AbortError') {
+        return new Response(JSON.stringify({ error: "La petición al webhook tardó demasiado (timeout)." }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 504, // Gateway Timeout
+        });
+    }
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
