@@ -11,12 +11,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, FileUp, Link as LinkIcon, FileText, Globe } from "lucide-react";
+import { Loader2, FileUp, Link as LinkIcon, FileText, Globe, Building } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
 import mammoth from "mammoth";
 
-type SourceType = "text" | "url" | "file" | "website";
+type SourceType = "text" | "url" | "file" | "website" | "listing";
 
 interface AddSourceDialogProps {
   open: boolean;
@@ -161,6 +161,28 @@ export const AddSourceDialog = ({ open, onOpenChange, agentId, onSourceAdded }: 
         return;
     }
 
+    if (sourceType === 'listing') {
+        if (!textContent) {
+            showError("Por favor, introduce la URL del listado.");
+            return;
+        }
+        setIsLoading(true);
+        setStatusMessage("Iniciando importación estructurada...");
+        try {
+            const { data, error } = await supabase.functions.invoke("scrape-listing", {
+                body: { agentId, url: textContent },
+            });
+            if (error) throw error;
+            showSuccess(`¡Importación iniciada! Se encontraron ${data.propertiesFound} propiedades para procesar.`);
+            onSourceAdded();
+            handleClose();
+        } catch (err) {
+            showError("Error al importar el listado: " + (err as Error).message);
+            setIsLoading(false);
+        }
+        return;
+    }
+
     if (!name || !textContent || !sourceType) {
       showError("El nombre y el contenido son obligatorios.");
       return;
@@ -217,13 +239,14 @@ export const AddSourceDialog = ({ open, onOpenChange, agentId, onSourceAdded }: 
           <Button variant="outline" className="h-24 flex-col gap-2" onClick={() => setSourceType("url")}><LinkIcon />Desde URL</Button>
           <Button variant="outline" className="h-24 flex-col gap-2" onClick={() => { setSourceType("file"); setTimeout(() => fileInputRef.current?.click(), 100); }}><FileUp />Subir Archivo</Button>
           <Button variant="outline" className="h-24 flex-col gap-2" onClick={() => setSourceType("website")}><Globe />Importar Sitio Web</Button>
+          <Button variant="outline" className="h-24 flex-col gap-2 md:col-span-2 bg-blue-500/10 border-blue-500/30 hover:bg-blue-500/20" onClick={() => setSourceType("listing")}><Building />Importar Listado Inmobiliario</Button>
         </div>
       );
     }
 
     return (
       <div className="space-y-4 py-4">
-        {sourceType !== 'website' && (
+        {sourceType !== 'website' && sourceType !== 'listing' && (
             <div>
                 <Label htmlFor="source-name">Nombre de la Fuente</Label>
                 <Input id="source-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Política de Devoluciones" />
@@ -257,7 +280,14 @@ export const AddSourceDialog = ({ open, onOpenChange, agentId, onSourceAdded }: 
             <div>
                 <Label htmlFor="website-url">URL del Sitio Web</Label>
                 <Input id="website-url" type="url" value={textContent} onChange={(e) => setTextContent(e.target.value)} placeholder="https://minegocio.com" />
-                <p className="text-xs text-gray-400 mt-2">Importaremos el contenido de esta página y sus enlaces internos.</p>
+                <p className="text-xs text-gray-400 mt-2">Importaremos el contenido de esta página y sus enlaces internos (hasta 15 páginas).</p>
+            </div>
+        )}
+        {sourceType === 'listing' && (
+            <div>
+                <Label htmlFor="listing-url">URL de la página de listados</Label>
+                <Input id="listing-url" type="url" value={textContent} onChange={(e) => setTextContent(e.target.value)} placeholder="https://inmobiliaria.com/propiedades-en-venta" />
+                <p className="text-xs text-gray-400 mt-2">Extraeremos cada propiedad de esta página como una unidad de conocimiento individual.</p>
             </div>
         )}
       </div>
@@ -278,7 +308,7 @@ export const AddSourceDialog = ({ open, onOpenChange, agentId, onSourceAdded }: 
         <DialogFooter>
           {sourceType && <Button variant="ghost" onClick={() => { setTextContent(''); setName(''); setSourceType(null); }} disabled={isLoading}>Atrás</Button>}
           <Button onClick={handleClose} variant="outline" disabled={isLoading}>Cancelar</Button>
-          {sourceType && <Button onClick={handleSubmit} disabled={isLoading || (sourceType !== 'website' && (!textContent || !name))}>
+          {sourceType && <Button onClick={handleSubmit} disabled={isLoading || !textContent || (sourceType !== 'website' && sourceType !== 'listing' && !name)}>
             {isLoading ? <Loader2 className="animate-spin" /> : "Guardar y Procesar"}
           </Button>}
         </DialogFooter>
