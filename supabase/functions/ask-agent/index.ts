@@ -271,10 +271,16 @@ serve(async (req) => {
 
     const webhookResponse = await fetch(agentData.webhook_url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json; charset=utf-8',
+        'Accept': 'application/json; charset=utf-8'
+      },
       body: JSON.stringify(webhookPayload),
       signal: AbortSignal.timeout(58000)
     });
+
+    console.log('Webhook Response Status:', webhookResponse.status);
+    console.log('Webhook Response Content-Type:', webhookResponse.headers.get('Content-Type'));
 
     if (!webhookResponse.ok) {
       const errorText = await webhookResponse.text();
@@ -282,8 +288,8 @@ serve(async (req) => {
       throw new Error(`El webhook devolvió un error (${webhookResponse.status}): ${errorText || 'Sin detalles'}`);
     }
 
-    const responseBodyBuffer = await webhookResponse.arrayBuffer();
-    const responseBodyText = new TextDecoder().decode(responseBodyBuffer);
+    const responseBodyText = await webhookResponse.text();
+    console.log('Webhook raw response body:', responseBodyText);
 
     if (!responseBodyText || responseBodyText.trim() === '') {
         throw new Error('El webhook devolvió una respuesta vacía.');
