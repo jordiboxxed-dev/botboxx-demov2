@@ -272,7 +272,7 @@ serve(async (req) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(webhookPayload),
-      signal: AbortSignal.timeout(30000) // 30 second timeout
+      signal: AbortSignal.timeout(58000) // Aumentado a 58 segundos
     });
 
     if (!webhookResponse.ok) {
