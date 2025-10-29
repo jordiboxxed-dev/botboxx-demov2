@@ -272,7 +272,7 @@ serve(async (req) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(webhookPayload),
-      signal: AbortSignal.timeout(58000) // Aumentado a 58 segundos
+      signal: AbortSignal.timeout(58000)
     });
 
     if (!webhookResponse.ok) {
@@ -281,7 +281,8 @@ serve(async (req) => {
       throw new Error(`El webhook devolvió un error (${webhookResponse.status}): ${errorText || 'Sin detalles'}`);
     }
 
-    const responseBodyText = await webhookResponse.text();
+    const responseBodyBuffer = await webhookResponse.arrayBuffer();
+    const responseBodyText = new TextDecoder().decode(responseBodyBuffer);
 
     if (!responseBodyText || responseBodyText.trim() === '') {
         throw new Error('El webhook devolvió una respuesta vacía.');
